@@ -1,6 +1,6 @@
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
-    Device, Host, StreamConfig, StreamError,
+    Device, Host, Sample, StreamConfig, StreamError,
 };
 use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, Select};
 use std::{io, sync::mpsc};
@@ -81,7 +81,7 @@ pub fn start_streams(
     println!("Conversion Ratio: 1 : {}", ratio);
 
     if deep {
-        ratio += 1;
+        ratio += 2;
     }
 
     // Create the data sharing callbacks
@@ -104,6 +104,11 @@ pub fn start_streams(
 
             src_index += 1;
             out_index += ratio;
+        }
+
+        while out_index < out.len() {
+            out[out_index] = Sample::EQUILIBRIUM;
+            out_index += 1;
         }
     };
 
