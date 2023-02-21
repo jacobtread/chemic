@@ -22,6 +22,7 @@ CheMic - Microphone testing tool
 
     let input_device = prompt_input_device(&host)?;
     let output_device = prompt_output_device(&host)?;
+    let deep = prompt_deep_voice()?;
 
     let input_config: StreamConfig = input_device
         .default_input_config()
@@ -55,7 +56,13 @@ CheMic - Microphone testing tool
     println!("Sample Rate: {}Hz", output_config.sample_rate.0);
     println!("== == == == == === === == == == == ==\n\n");
 
-    start_streams(input_device, &input_config, output_device, &output_config)
+    start_streams(
+        input_device,
+        &input_config,
+        output_device,
+        &output_config,
+        deep,
+    )
 }
 
 pub fn start_streams(
@@ -63,6 +70,7 @@ pub fn start_streams(
     ic: &StreamConfig,
     output: Device,
     oc: &StreamConfig,
+    deep: bool,
 ) -> io::Result<()> {
     // Create conversion ratio
     let i_rate = ic.sample_rate;
@@ -72,7 +80,7 @@ pub fn start_streams(
 
     println!("Conversion Ratio: 1 : {}", ratio);
 
-    if prompt_ransom_mode()? {
+    if deep {
         ratio += 1;
     }
 
@@ -144,7 +152,7 @@ fn handle_error(error: StreamError) {
     eprint!("Error while streaming: {}", error);
 }
 
-fn prompt_ransom_mode() -> io::Result<bool> {
+fn prompt_deep_voice() -> io::Result<bool> {
     let theme = ColorfulTheme::default();
     Confirm::with_theme(&theme)
         .with_prompt("Enable deep voice?")
