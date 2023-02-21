@@ -7,6 +7,7 @@ license = "MIT"
 readme = "README.md"
 authors = ["Jacobtread <jacobtread@gmail.com>"]
 keywords = ["Microphone", "Testing"]
+repository = "https://github.com/jacobtread/chemic"
 
 [dependencies]
 cpal = "0.15.0"
