@@ -2,8 +2,11 @@ use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     Device, Host, Sample, StreamConfig, StreamError,
 };
-use dialoguer::{console::Term, theme::ColorfulTheme, Confirm, Select};
-use std::{io, sync::mpsc};
+use dasp_interpolate::linear::Linear;
+use dasp_signal::{interpolate::Converter, Signal};
+use dialoguer::{console::Term, theme::ColorfulTheme, Select};
+use ringbuf::{Consumer, HeapRb, SharedRb};
+use std::{io, mem::MaybeUninit, sync::Arc};
 
 fn main() -> io::Result<()> {
     println!(
@@ -22,7 +25,6 @@ CheMic - Microphone testing tool
 
     let input_device = prompt_input_device(&host)?;
     let output_device = prompt_output_device(&host)?;
-    let deep = prompt_deep_voice()?;
 
     let input_config: StreamConfig = input_device
         .default_input_config()
@@ -56,13 +58,7 @@ CheMic - Microphone testing tool
     println!("Sample Rate: {}Hz", output_config.sample_rate.0);
     println!("== == == == == === === == == == == ==\n\n");
 
-    start_streams(
-        input_device,
-        &input_config,
-        output_device,
-        &output_config,
-        deep,
-    )
+    start_streams(input_device, &input_config, output_device, &output_config)
 }
 
 pub fn start_streams(
@@ -70,50 +66,38 @@ pub fn start_streams(
     ic: &StreamConfig,
     output: Device,
     oc: &StreamConfig,
-    deep: bool,
 ) -> io::Result<()> {
-    // Create conversion ratio
-    let i_rate = ic.sample_rate;
-    let o_rate = oc.sample_rate;
+    // The buffer to share samples
+    let ring = HeapRb::<f32>::new(ic.sample_rate.0 as usize * 2);
+    let (mut producer, consumer) = ring.split();
 
-    let mut ratio = (1.0 / (i_rate.0 as f32 / o_rate.0 as f32)).ceil() as usize;
+    // Consumer source
+    let source = ConsumerSignal(consumer);
 
-    println!("Conversion Ratio: 1 : {}", ratio);
+    // We need to interpolate to the target sample rate
+    let mut conv = Converter::from_hz_to_hz(
+        source,
+        Linear::new(0f32, 0f32),
+        ic.sample_rate.0 as f64,
+        oc.sample_rate.0 as f64,
+    )
+    .until_exhausted();
 
-    if deep {
-        ratio += 2;
-    }
-
-    // Create the data sharing callbacks
-    let (tx, rx) = mpsc::channel::<Vec<f32>>();
     let data_out = move |out: &mut [f32], _: &cpal::OutputCallbackInfo| {
-        let src = match rx.try_recv() {
-            Ok(value) => value,
-            Err(_) => return,
-        };
+        for index in 0..out.len() {
+            let value = match conv.next() {
+                Some(value) => value,
+                None => break,
+            };
 
-        let mut src_index = 0;
-        let mut out_index = 0;
-
-        // Streching out the input data to match the sample rate of
-        // the output data
-        while src_index < src.len() && out_index + ratio < out.len() {
-            for offset in 0..=ratio {
-                out[out_index + offset] = src[src_index];
-            }
-
-            src_index += 1;
-            out_index += ratio;
-        }
-
-        while out_index < out.len() {
-            out[out_index] = Sample::EQUILIBRIUM;
-            out_index += 1;
+            out[index] = value;
         }
     };
 
     let data_in = move |data: &[f32], _: &cpal::InputCallbackInfo| {
-        tx.send(data.to_vec()).ok();
+        for &value in data {
+            let _ = producer.push(value);
+        }
     };
 
     // Build the streams
@@ -153,17 +137,23 @@ pub fn start_streams(
     Ok(())
 }
 
-fn handle_error(error: StreamError) {
-    eprint!("Error while streaming: {}", error);
+/// Wrapper over a consumer to allow it to be used as a signal
+/// for conversion between Hz values
+pub struct ConsumerSignal(Consumer<f32, Arc<SharedRb<f32, Vec<MaybeUninit<f32>>>>>);
+
+impl Signal for ConsumerSignal {
+    type Frame = f32;
+
+    fn next(&mut self) -> Self::Frame {
+        match self.0.pop() {
+            Some(value) => value,
+            None => Sample::EQUILIBRIUM,
+        }
+    }
 }
 
-fn prompt_deep_voice() -> io::Result<bool> {
-    let theme = ColorfulTheme::default();
-    Confirm::with_theme(&theme)
-        .with_prompt("Enable deep voice?")
-        .default(false)
-        .show_default(true)
-        .interact()
+fn handle_error(error: StreamError) {
+    eprint!("Error while streaming: {}", error);
 }
 
 /// Prompt the user to choose their input device

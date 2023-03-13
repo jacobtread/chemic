@@ -12,3 +12,6 @@ repository = "https://github.com/jacobtread/chemic"
 [dependencies]
 cpal = "0.15.0"
 dialoguer = "0.10.3"
+ringbuf = "0.3.2"
+dasp_interpolate = { version = "0.11.0", features = ["linear"] }
+dasp_signal = "0.11.0"
