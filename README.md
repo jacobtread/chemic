@@ -7,7 +7,7 @@ This is a tool for checking your microphone using the command line.
 
 ## Installation
 
-### Releases
+### Downloads
 
 You can download the latest release for Windows from [Here](https://github.com/jacobtread/chemic/releases/latest/download/chemic.exe)
 
