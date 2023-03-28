@@ -24,4 +24,4 @@ lto = "thin"
 # Bininstall meta
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }{ archive-suffix }"
-pkg-fmt = "binary-ext"
+pkg-fmt = "bin"
