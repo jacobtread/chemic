@@ -2,6 +2,10 @@
 
 > `Check-Microphone` Microphone checking tool
 
+![License](https://img.shields.io/github/license/jacobtread/chemic?style=for-the-badge)
+![Cargo Version](https://img.shields.io/crates/v/chemic?style=for-the-badge)
+![Cargo Downloads](https://img.shields.io/crates/d/chemic?style=for-the-badge)
+
 This is a tool for checking your microphone using the command line. 
 
 
