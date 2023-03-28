@@ -6,7 +6,7 @@ use dasp_interpolate::linear::Linear;
 use dasp_signal::{interpolate::Converter, Signal};
 use dialoguer::{console::Term, theme::ColorfulTheme, Select};
 use ringbuf::{Consumer, HeapRb, SharedRb};
-use std::{io, mem::MaybeUninit, sync::Arc};
+use std::{env::args, io, mem::MaybeUninit, sync::Arc};
 
 fn main() -> io::Result<()> {
     println!(
@@ -23,8 +23,44 @@ CheMic - Microphone testing tool
 
     let host = cpal::default_host();
 
-    let input_device = prompt_input_device(&host)?;
-    let output_device = prompt_output_device(&host)?;
+    let mut input_device: Option<Device> = None;
+    let mut output_device: Option<Device> = None;
+
+    if let Some(arg) = args().nth(1) {
+        match &arg.to_lowercase() as &str {
+            "default" | "--default" | "d" | "-d" => {
+                input_device = host.default_input_device();
+                output_device = host.default_output_device();
+            }
+            _ => {}
+        }
+    }
+
+    // Prompt input device if none specified
+    if input_device.is_none() {
+        input_device = Some(prompt_input_device(&host)?)
+    }
+
+    // Prompt for an output device if none specified
+    if output_device.is_none() {
+        output_device = Some(prompt_output_device(&host)?)
+    }
+
+    let input_device = match input_device {
+        Some(value) => value,
+        None => {
+            eprintln!("Missing input device");
+            panic!();
+        }
+    };
+
+    let output_device = match output_device {
+        Some(value) => value,
+        None => {
+            eprintln!("Missing output device");
+            panic!();
+        }
+    };
 
     let input_config: StreamConfig = input_device
         .default_input_config()
