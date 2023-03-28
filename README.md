@@ -13,14 +13,21 @@ This is a tool for checking your microphone using the command line.
 
 ### Downloads
 
-You can download the latest release for Windows from [Here](https://github.com/jacobtread/chemic/releases/latest/download/chemic.exe)
-
+You can download the latest release for Windows from [Here](https://github.com/jacobtread/chemic/releases/latest)
 ### Cargo Install
 
 If you have Cargo installed you can install it using the following command
 
-```
+```shell
 cargo install chemic
+```
+
+### Cargo Bin-Install
+
+If you have cargo binstall installed (https://github.com/cargo-bins/cargo-binstall) you can use the following command
+
+```shell
+cargo binstall chemic
 ```
 
 ## Usage
