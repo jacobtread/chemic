@@ -9,37 +9,37 @@
 This is a tool for checking your microphone using the command line. 
 
 
-## Installation
+## 🌟 Installation
 
-### Downloads
+### 💾 Downloads
 
 You can download the latest pre-built release for Windows from [Here](https://github.com/jacobtread/chemic/releases/latest)
 
-### Cargo Bin-Install
+### 📦 Cargo Bin-Install
 
-If you have cargo binstall installed (https://github.com/cargo-bins/cargo-binstall) you can use the following command to install a pre-built binary
+If you have [cargo binstall](https://github.com/cargo-bins/cargo-binstall) installed, you can install a pre-built CheMic binary with the following command:
 
 ```shell
 cargo binstall chemic
 ```
 
-### Cargo Install
+### 📦 Cargo Install
 
-If you have Cargo installed you can install it using the following command
+If you have Cargo installed you can install it using the following command:
 
 ```shell
 cargo install chemic
 ```
 
-
-## Usage
+## 🚀 Usage
 
 Simply open your terminal and type `chemic` to start the program. You can also provide the `-d` or `--default` flag to use the default input and output device rather than being prompted to select
 
-
 ## 📷 Screenshots
 
-![](images/1.png)
-![](images/2.png)
-![](images/3.png)
-![](images/4.png)
+Below are some screenshots of what the program looks like in-use
+
+|                   |                   |
+| ----------------- | ----------------- |
+| ![](images/1.png) | ![](images/2.png) |
+| ![](images/3.png) | ![](images/4.png) |
