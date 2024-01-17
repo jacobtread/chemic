@@ -1,0 +1,56 @@
+name: Rust
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+    branches: ["master"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ubuntu-build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Update apt
+        run: sudo apt update
+      - name: Install alsa
+        run: sudo apt-get install libasound2-dev
+      - name: Install libjack
+        run: sudo apt-get install libjack-jackd2-dev libjack-jackd2-0
+      - name: Build
+        run: cargo build --verbose
+      - name: Run tests
+        run: cargo test --verbose
+
+  windows-build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install ASIO SDK
+        env:
+          LINK: https://www.steinberg.net/asiosdk
+        run: |
+          curl -L -o asio.zip $env:LINK
+          7z x -oasio asio.zip
+          move asio\*\* asio\
+      - name: Install ASIO4ALL
+        run: choco install asio4all
+      - name: Install llvm and clang
+        run: choco install llvm
+      - name: Build
+        run: cargo build --verbose
+      - name: Run tests
+        run: cargo test --verbose
+
+  rustfmt-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run rustfmt
+        uses: actions-rs/cargo@v1
+      - name: Run fmt
+        run: cargo fmt --all --check
