@@ -1,6 +1,6 @@
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
-    Device, Host, Sample, StreamConfig, StreamError,
+    Device, Host, InputCallbackInfo, OutputCallbackInfo, Sample, StreamConfig, StreamError,
 };
 use dasp_interpolate::linear::Linear;
 use dasp_signal::{interpolate::Converter, Signal};
@@ -9,7 +9,7 @@ use dialoguer::{
     theme::ColorfulTheme,
     Select,
 };
-use ringbuf::{HeapConsumer, HeapRb};
+use ringbuf::{HeapConsumer, HeapProducer, HeapRb};
 use std::{env::args, io};
 
 fn main() -> io::Result<()> {
@@ -32,6 +32,7 @@ CheMic - Microphone testing tool
 
     if let Some(arg) = args().nth(1) {
         match &arg.to_lowercase() as &str {
+            // Handle default device option
             "default" | "--default" | "d" | "-d" => {
                 input_device = host.default_input_device();
                 output_device = host.default_output_device();
@@ -76,10 +77,9 @@ CheMic - Microphone testing tool
         .expect("No suppoorted output configs")
         .into();
 
-    let input_name = match input_device.name() {
-        Ok(value) => value,
-        Err(_) => "Unknown".to_string(),
-    };
+    let input_name = input_device
+        .name()
+        .unwrap_or_else(|_| "Unknown".to_string());
 
     println!("== == == == Input Device == == == ==");
     println!("Name       : {}", input_name);
@@ -87,10 +87,9 @@ CheMic - Microphone testing tool
     println!("Sample Rate: {}Hz", input_config.sample_rate.0);
     println!("== == == == == === === == == == == ==\n\n");
 
-    let output_name = match output_device.name() {
-        Ok(value) => value,
-        Err(_) => "Unknown".to_string(),
-    };
+    let output_name = output_device
+        .name()
+        .unwrap_or_else(|_| "Unknown".to_string());
 
     println!("== == == == Output Device == == == ==");
     println!("Name       : {}", output_name);
@@ -101,39 +100,56 @@ CheMic - Microphone testing tool
     start_streams(input_device, &input_config, output_device, &output_config)
 }
 
+/// Create a input stream callback that pushes the callback data onto
+/// the provided `producer`
+fn create_producer_callback(
+    mut producer: HeapProducer<f32>,
+) -> impl FnMut(&[f32], &InputCallbackInfo) {
+    move |data, _| {
+        // Write the data to the producer
+        producer.push_slice(data);
+    }
+}
+
+/// Creates an output stream callback that stores the output from the
+/// provided `converter` onto the callback output buffer
+fn create_converter_callback(
+    mut converter: Converter<ConsumerSignal, Linear<f32>>,
+) -> impl FnMut(&mut [f32], &OutputCallbackInfo) {
+    move |data, _| {
+        // Fill the output data with the values from the converter
+        data.fill_with(|| converter.next());
+    }
+}
+
 fn start_streams(
     input: Device,
-    ic: &StreamConfig,
+    input_config: &StreamConfig,
     output: Device,
-    oc: &StreamConfig,
+    output_config: &StreamConfig,
 ) -> io::Result<()> {
-    // The buffer to share samples
-    let ring: HeapRb<f32> = HeapRb::new(ic.sample_rate.0 as usize * 2);
-    let (mut producer, consumer) = ring.split();
+    // Create the ring buffer for the input data
+    let ring: HeapRb<f32> = HeapRb::new(input_config.sample_rate.0 as usize * 2);
+    let (producer, consumer) = ring.split();
 
-    // Consumer source
+    // Wrap the consumer for use as a signal
     let source = ConsumerSignal(consumer);
 
     // We need to interpolate to the target sample rate
-    let mut conv = Converter::from_hz_to_hz(
+    let conv = Converter::from_hz_to_hz(
         source,
         Linear::new(0f32, 0f32),
-        ic.sample_rate.0 as f64,
-        oc.sample_rate.0 as f64,
+        input_config.sample_rate.0 as f64,
+        output_config.sample_rate.0 as f64,
     );
 
-    let data_out = move |out: &mut [f32], _: &cpal::OutputCallbackInfo| {
-        // Fill the output buffer with the values from the converter
-        out.fill_with(|| conv.next());
-    };
-
-    let data_in = move |data: &[f32], _: &cpal::InputCallbackInfo| {
-        // Write the data to the producer
-        producer.push_slice(data);
-    };
-
     // Build the streams
-    let output_stream = match output.build_output_stream(oc, data_out, handle_error, None) {
+    let output_stream = match output.build_output_stream(
+        output_config,
+        create_converter_callback(conv),
+        handle_error,
+        None,
+    ) {
         Ok(value) => value,
         Err(err) => {
             eprintln!("Error while starting output stream: {}", err);
@@ -141,7 +157,12 @@ fn start_streams(
         }
     };
 
-    let input_stream = match input.build_input_stream(ic, data_in, handle_error, None) {
+    let input_stream = match input.build_input_stream(
+        input_config,
+        create_producer_callback(producer),
+        handle_error,
+        None,
+    ) {
         Ok(value) => value,
         Err(err) => {
             eprintln!("Error while starting input stream: {}", err);
