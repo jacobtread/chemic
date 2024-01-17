@@ -137,6 +137,9 @@ fn start_streams(
         output_config.sample_rate.0 as f64,
     );
 
+    // Small closure for handling stream errors
+    let handle_error = |error: StreamError| eprint!("Error while streaming: {}", error);
+
     // Build the streams
     let output_stream = match output.build_output_stream(
         output_config,
@@ -178,18 +181,17 @@ fn start_streams(
     println!("Playing microphone through output device...");
     println!("Press the ESCAPE or BACKSPACE key to stop..");
 
-    // Wait for user input to stop the program
-    loop {
-        let key = Term::stderr().read_key()?;
-        match key {
-            // Stop capturing when a stop key is pressed
-            Key::Escape | Key::Backspace | Key::Del | Key::CtrlC => break,
-            // Another key was pushed
-            _ => {}
-        }
-    }
+    // Wait for the stop key
+    while !stop_key_pressed() {}
 
     Ok(())
+}
+
+/// Reads a input from the terminal, returns whether the
+/// provided input matches a stop key
+fn stop_key_pressed() -> bool {
+    let key = Term::stderr().read_key().expect("Failed to read stop key");
+    matches!(key, Key::Escape | Key::Backspace | Key::Del | Key::CtrlC)
 }
 
 /// [Signal] implementation for producing frames from a [HeapConsumer]
@@ -208,10 +210,6 @@ impl Signal for ConsumerSignal {
             // Use silence if no more values are available
             .unwrap_or(Sample::EQUILIBRIUM)
     }
-}
-
-fn handle_error(error: StreamError) {
-    eprint!("Error while streaming: {}", error);
 }
 
 /// [Device] with an additional name that has already been
