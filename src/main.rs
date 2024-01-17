@@ -30,14 +30,20 @@ CheMic - Microphone testing tool
     let mut input_device: Option<Device> = None;
     let mut output_device: Option<Device> = None;
 
-    if let Some(arg) = args().nth(1) {
-        match &arg.to_lowercase() as &str {
+    // Search the program arguments for default options
+    for arg in args().skip(1) {
+        match arg.to_lowercase().as_str() {
             // Handle default device option
             "default" | "--default" | "d" | "-d" => {
+                println!("Using default devices");
+
                 input_device = host.default_input_device();
                 output_device = host.default_output_device();
+                break;
             }
-            _ => {}
+            _ => {
+                eprintln!("Unknown argument \"{}\"", arg);
+            }
         }
     }
 
