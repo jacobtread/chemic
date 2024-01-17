@@ -5,8 +5,8 @@ use cpal::{
 use dasp_interpolate::linear::Linear;
 use dasp_signal::{interpolate::Converter, Signal};
 use dialoguer::{console::Term, theme::ColorfulTheme, Select};
-use ringbuf::{Consumer, HeapRb, SharedRb};
-use std::{env::args, io, mem::MaybeUninit, sync::Arc};
+use ringbuf::{HeapConsumer, HeapRb};
+use std::{env::args, io};
 
 fn main() -> io::Result<()> {
     println!(
@@ -97,14 +97,14 @@ CheMic - Microphone testing tool
     start_streams(input_device, &input_config, output_device, &output_config)
 }
 
-pub fn start_streams(
+fn start_streams(
     input: Device,
     ic: &StreamConfig,
     output: Device,
     oc: &StreamConfig,
 ) -> io::Result<()> {
     // The buffer to share samples
-    let ring = HeapRb::<f32>::new(ic.sample_rate.0 as usize * 2);
+    let ring: HeapRb<f32> = HeapRb::new(ic.sample_rate.0 as usize * 2);
     let (mut producer, consumer) = ring.split();
 
     // Consumer source
@@ -116,28 +116,20 @@ pub fn start_streams(
         Linear::new(0f32, 0f32),
         ic.sample_rate.0 as f64,
         oc.sample_rate.0 as f64,
-    )
-    .until_exhausted();
+    );
 
     let data_out = move |out: &mut [f32], _: &cpal::OutputCallbackInfo| {
-        for index in 0..out.len() {
-            let value = match conv.next() {
-                Some(value) => value,
-                None => break,
-            };
-
-            out[index] = value;
-        }
+        // Fill the output buffer with the values from the converter
+        out.fill_with(|| conv.next());
     };
 
     let data_in = move |data: &[f32], _: &cpal::InputCallbackInfo| {
-        for &value in data {
-            let _ = producer.push(value);
-        }
+        // Write the data to the producer
+        producer.push_slice(data);
     };
 
     // Build the streams
-    let output_stream = match output.build_output_stream(&oc, data_out, handle_error, None) {
+    let output_stream = match output.build_output_stream(oc, data_out, handle_error, None) {
         Ok(value) => value,
         Err(err) => {
             eprintln!("Error while starting output stream: {}", err);
@@ -145,7 +137,7 @@ pub fn start_streams(
         }
     };
 
-    let input_stream = match input.build_input_stream(&ic, data_in, handle_error, None) {
+    let input_stream = match input.build_input_stream(ic, data_in, handle_error, None) {
         Ok(value) => value,
         Err(err) => {
             eprintln!("Error while starting input stream: {}", err);
@@ -173,18 +165,21 @@ pub fn start_streams(
     Ok(())
 }
 
-/// Wrapper over a consumer to allow it to be used as a signal
-/// for conversion between Hz values
-pub struct ConsumerSignal(Consumer<f32, Arc<SharedRb<f32, Vec<MaybeUninit<f32>>>>>);
+/// [Signal] implementation for producing frames from a [HeapConsumer]
+/// allowing it to be used as a signal to convert values from
+/// the consumer between Hz values.
+///
+/// Will produce silence when the consumer has no values to produce
+struct ConsumerSignal(HeapConsumer<f32>);
 
 impl Signal for ConsumerSignal {
     type Frame = f32;
 
     fn next(&mut self) -> Self::Frame {
-        match self.0.pop() {
-            Some(value) => value,
-            None => Sample::EQUILIBRIUM,
-        }
+        self.0
+            .pop()
+            // Use silence if no more values are available
+            .unwrap_or(Sample::EQUILIBRIUM)
     }
 }
 
