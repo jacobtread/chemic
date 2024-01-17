@@ -4,7 +4,11 @@ use cpal::{
 };
 use dasp_interpolate::linear::Linear;
 use dasp_signal::{interpolate::Converter, Signal};
-use dialoguer::{console::Term, theme::ColorfulTheme, Select};
+use dialoguer::{
+    console::{Key, Term},
+    theme::ColorfulTheme,
+    Select,
+};
 use ringbuf::{HeapConsumer, HeapRb};
 use std::{env::args, io};
 
@@ -157,10 +161,18 @@ fn start_streams(
     };
 
     println!("Playing microphone through output device...");
-    println!("Press any key to stop..");
+    println!("Press the ESCAPE or BACKSPACE key to stop..");
 
     // Wait for user input to stop the program
-    Term::stderr().read_key()?;
+    loop {
+        let key = Term::stderr().read_key()?;
+        match key {
+            // Stop capturing when a stop key is pressed
+            Key::Escape | Key::Backspace | Key::Del | Key::CtrlC => break,
+            // Another key was pushed
+            _ => {}
+        }
+    }
 
     Ok(())
 }
