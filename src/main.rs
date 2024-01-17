@@ -1,6 +1,7 @@
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
-    Device, Host, InputCallbackInfo, OutputCallbackInfo, Sample, StreamConfig, StreamError,
+    Device, Devices, DevicesError, Host, InputCallbackInfo, OutputCallbackInfo, Sample,
+    StreamConfig, StreamError,
 };
 use dasp_interpolate::linear::Linear;
 use dasp_signal::{interpolate::Converter, Signal};
@@ -27,83 +28,70 @@ CheMic - Microphone testing tool
 
     let host = cpal::default_host();
 
-    let mut input_device: Option<Device> = None;
-    let mut output_device: Option<Device> = None;
+    let mut default_input: Option<Device> = None;
+    let mut default_output: Option<Device> = None;
 
-    // Search the program arguments for default options
-    for arg in args().skip(1) {
-        match arg.to_lowercase().as_str() {
-            // Handle default device option
-            "default" | "--default" | "d" | "-d" => {
-                println!("Using default devices");
+    let is_default = args()
+        .skip(1)
+        // Convert to lowercase for case-insensitive matching
+        .map(|arg| arg.to_lowercase())
+        // Find a matching default arg
+        .any(|arg| matches!(arg.as_str(), "default" | "--default" | "d" | "-d"));
 
-                input_device = host.default_input_device();
-                output_device = host.default_output_device();
-                break;
-            }
-            _ => {
-                eprintln!("Unknown argument \"{}\"", arg);
-            }
-        }
+    // Set the default input devices
+    if is_default {
+        default_input = host.default_input_device();
+        default_output = host.default_output_device();
     }
 
-    // Prompt input device if none specified
-    if input_device.is_none() {
-        input_device = Some(prompt_input_device(&host)?)
-    }
+    let input_device: NamedDevice = default_input
+        // Create a named device
+        .map(NamedDevice::from)
+        // Prompt input device if none specified
+        .unwrap_or_else(|| {
+            prompt_device(&host, "Select input device to test", DeviceType::Input)
+                .expect("Failed to select input device")
+        });
 
-    // Prompt for an output device if none specified
-    if output_device.is_none() {
-        output_device = Some(prompt_output_device(&host)?)
-    }
-
-    let input_device = match input_device {
-        Some(value) => value,
-        None => {
-            eprintln!("Missing input device");
-            panic!();
-        }
-    };
-
-    let output_device = match output_device {
-        Some(value) => value,
-        None => {
-            eprintln!("Missing output device");
-            panic!();
-        }
-    };
+    let output_device: NamedDevice = default_output
+        // Create a named device
+        .map(NamedDevice::from)
+        // Prompt for an output device if none specified
+        .unwrap_or_else(|| {
+            prompt_device(&host, "Select output device to play to", DeviceType::Output)
+                .expect("Failed to select output device")
+        });
 
     let input_config: StreamConfig = input_device
+        .device
         .default_input_config()
         .expect("No supported input configs")
         .into();
 
     let output_config: StreamConfig = output_device
+        .device
         .default_output_config()
         .expect("No suppoorted output configs")
         .into();
 
-    let input_name = input_device
-        .name()
-        .unwrap_or_else(|_| "Unknown".to_string());
-
     println!("== == == == Input Device == == == ==");
-    println!("Name       : {}", input_name);
+    println!("Name       : {}", input_device.name);
     println!("Channels   : {}", input_config.channels);
     println!("Sample Rate: {}Hz", input_config.sample_rate.0);
     println!("== == == == == === === == == == == ==\n\n");
 
-    let output_name = output_device
-        .name()
-        .unwrap_or_else(|_| "Unknown".to_string());
-
     println!("== == == == Output Device == == == ==");
-    println!("Name       : {}", output_name);
+    println!("Name       : {}", output_device.name);
     println!("Channels   : {}", output_config.channels);
     println!("Sample Rate: {}Hz", output_config.sample_rate.0);
     println!("== == == == == === === == == == == ==\n\n");
 
-    start_streams(input_device, &input_config, output_device, &output_config)
+    start_streams(
+        input_device.device,
+        &input_config,
+        output_device.device,
+        &output_config,
+    )
 }
 
 /// Create a input stream callback that pushes the callback data onto
@@ -226,71 +214,85 @@ fn handle_error(error: StreamError) {
     eprint!("Error while streaming: {}", error);
 }
 
-/// Prompt the user to choose their input device
-fn prompt_input_device(host: &Host) -> io::Result<Device> {
+/// [Device] with an additional name that has already been
+/// determined, might be a generic name like "Default" or "Unknown"
+struct NamedDevice {
+    /// The device itself
+    device: Device,
+    /// The name of the device
+    name: String,
+}
+
+impl NamedDevice {
+    /// Creates a new named device from the provided device, wraps
+    /// the device name with "Default" to indicate its a default
+    /// device
+    fn from_default(device: Device) -> Self {
+        let mut device = NamedDevice::from(device);
+        device.name = format!("Default ({})", device.name);
+        device
+    }
+}
+
+impl From<Device> for NamedDevice {
+    fn from(value: Device) -> Self {
+        let device = value;
+        let name = device
+            .name()
+            // Default "Unknown" name when name cannot be determined
+            .unwrap_or_else(|_| "Unknown".to_string());
+        Self { device, name }
+    }
+}
+
+/// Type of a device
+enum DeviceType {
+    /// Input device
+    Input,
+    /// Ouput device
+    Output,
+}
+
+/// Prompts the user for a input device using the provided `prompt`
+/// the `output` option determines whether to include input or output
+/// devices
+fn prompt_device(host: &Host, prompt: &str, ty: DeviceType) -> io::Result<NamedDevice> {
     let theme = ColorfulTheme::default();
     let mut select = Select::with_theme(&theme);
-    select.with_prompt("Select input device to test");
+    select.with_prompt(prompt);
     select.default(0);
     select.report(true);
-    let mut devices = Vec::new();
 
-    // Append the default device
-    if let Some(default) = host.default_input_device() {
-        let name = if let Ok(name) = default.name() {
-            format!("Default ({})", name)
-        } else {
-            "Default".to_string()
-        };
+    let mut devices: Vec<NamedDevice> = Vec::new();
 
-        devices.push(default);
-        select.item(name);
-    }
+    // Type bounds for the default device fn
+    type DefaultDeviceFn = fn(&Host) -> Option<Device>;
 
-    // Append all other known devices
-    host.input_devices()
-        .expect("Unable to load host input devices")
-        .for_each(|device| {
-            if let Ok(name) = device.name() {
-                devices.push(device);
-                select.item(name);
-            }
-        });
+    // Type alias for the filtered device iterator
+    type DevicesFiltered = std::iter::Filter<Devices, fn(&Device) -> bool>;
 
-    let index = select.interact()?;
-    let device = devices.remove(index);
+    // Type bounds for the devices fn
+    type DevicesFn = fn(&Host) -> Result<DevicesFiltered, DevicesError>;
 
-    Ok(device)
-}
-/// Prompt the user to choose their input device
-fn prompt_output_device(host: &Host) -> io::Result<Device> {
-    let theme = ColorfulTheme::default();
-    let mut select = Select::with_theme(&theme);
-    select.with_prompt("Select output device to play to");
-    select.default(0);
-    let mut devices = Vec::new();
+    let (default_device, devices_fn): (DefaultDeviceFn, DevicesFn) = match ty {
+        DeviceType::Input => (Host::default_input_device, Host::input_devices),
+        DeviceType::Output => (Host::default_output_device, Host::output_devices),
+    };
 
-    // Append the default device
-    if let Some(default) = host.default_output_device() {
-        let name = if let Ok(name) = default.name() {
-            format!("Default ({})", name)
-        } else {
-            "Default".to_string()
-        };
+    // Add the default device
+    devices.extend(default_device(host).map(NamedDevice::from_default));
 
-        devices.push(default);
-        select.item(name);
-    }
+    // Add all devices, includes the default device
+    devices.extend(
+        devices_fn(host)
+            .expect("Unable to load devices")
+            .map(NamedDevice::from),
+    );
 
-    // Append all other known devices
-    host.output_devices()
-        .expect("Unable to load host output devices")
-        .for_each(|device| {
-            if let Ok(name) = device.name() {
-                devices.push(device);
-                select.item(name);
-            }
-        });
+    // Add a select item for each device
+    devices
+        .iter()
+        .for_each(|device| _ = select.item(&device.name));
 
     let index = select.interact()?;
     let device = devices.remove(index);
