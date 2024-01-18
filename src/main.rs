@@ -293,20 +293,18 @@ fn prompt_device(host: &Host, prompt: &str, ty: DeviceType) -> io::Result<NamedD
         return Err(io::Error::other("No devices available"));
     }
 
+    // Collec the device names
+    let device_names: Vec<&str> = devices.iter().map(|device| device.name.as_str()).collect();
+
     // Create the selection prompt
     let theme = ColorfulTheme::default();
-    let mut select = Select::with_theme(&theme);
-    select.with_prompt(prompt);
-    select.default(0);
-    select.report(true);
-
-    // Add a select item for each device
-    devices
-        .iter()
-        .for_each(|device| _ = select.item(&device.name));
-
-    // Select the device
-    let index = select.interact()?;
+    let index = Select::with_theme(&theme)
+        .with_prompt(prompt)
+        .default(0)
+        .report(true)
+        .items(&device_names)
+        .interact()
+        .map_err(io::Error::other)?;
     let device = devices.remove(index);
 
     Ok(device)
