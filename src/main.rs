@@ -13,6 +13,8 @@ use dialoguer::{
 use ringbuf::{HeapConsumer, HeapProducer, HeapRb};
 use std::{env::args, io};
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 fn main() -> io::Result<()> {
     println!(
         r#"
@@ -22,7 +24,7 @@ fn main() -> io::Result<()> {
 |   ---|     |  -__||       |  ||  __|  | |  
 |______|__|__|_____||__|_|__|__||____|  |_| 
                                         
-CheMic - Microphone testing tool
+CheMic - Microphone testing tool (v{VERSION})
 "#
     );
 
