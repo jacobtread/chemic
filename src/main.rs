@@ -111,14 +111,54 @@ fn create_producer_callback(
     }
 }
 
+/// Type alias for the sample converter
+type SampleConverter = Converter<ConsumerSignal, Linear<f32>>;
+
 /// Creates an output stream callback that stores the output from the
 /// provided `converter` onto the callback output buffer
 fn create_converter_callback(
-    mut converter: Converter<ConsumerSignal, Linear<f32>>,
+    mut channel_converter: ChannelConverter,
+    mut converter: SampleConverter,
 ) -> impl FnMut(&mut [f32], &OutputCallbackInfo) {
     move |data, _| {
         // Fill the output data with the values from the converter
-        data.fill_with(|| converter.next());
+        data.fill_with(|| channel_converter.next(&mut converter));
+    }
+}
+
+pub enum ChannelConverter {
+    /// Direct passthrough for channels of the same width
+    Passthrough,
+    /// Conversion from dual channel to single channel by taking the
+    /// average of both channels
+    StereoToMono,
+    /// Single channel to dual channel by duplicating the value for
+    /// both channels
+    MonoToStereo(Option<f32>),
+}
+
+impl ChannelConverter {
+    fn next(&mut self, converter: &mut SampleConverter) -> f32 {
+        match self {
+            ChannelConverter::Passthrough => converter.next(),
+            ChannelConverter::StereoToMono => {
+                let left = converter.next();
+                let right = converter.next();
+
+                (left + right) / 2.
+            }
+            ChannelConverter::MonoToStereo(value) => {
+                value
+                    // Take the current sample if available
+                    .take()
+                    // Insert the next sample if theres not a stored sample
+                    .unwrap_or_else(|| {
+                        let next = converter.next();
+                        *value = Some(next);
+                        next
+                    })
+            }
+        }
     }
 }
 
@@ -136,12 +176,19 @@ fn start_streams(
     let source = ConsumerSignal(consumer);
 
     // We need to interpolate to the target sample rate
-    let conv = Converter::from_hz_to_hz(
+    let converter = Converter::from_hz_to_hz(
         source,
         Linear::new(0f32, 0f32),
         input_config.sample_rate.0 as f64,
         output_config.sample_rate.0 as f64,
     );
+
+    let channel_converter: ChannelConverter = match (input_config.channels, output_config.channels)
+    {
+        (1, 2) => ChannelConverter::MonoToStereo(None),
+        (2, 1) => ChannelConverter::StereoToMono,
+        _ => ChannelConverter::Passthrough,
+    };
 
     // Small closure for handling stream errors
     let handle_error = |error: StreamError| eprint!("Error while streaming: {}", error);
@@ -150,7 +197,7 @@ fn start_streams(
     let output_stream = output
         .build_output_stream(
             output_config,
-            create_converter_callback(conv),
+            create_converter_callback(channel_converter, converter),
             handle_error,
             None,
         )
