@@ -1,7 +1,7 @@
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
-    Device, Devices, DevicesError, Host, InputCallbackInfo, OutputCallbackInfo, Sample,
-    StreamConfig, StreamError,
+    BufferSize, Device, Devices, DevicesError, Host, InputCallbackInfo, OutputCallbackInfo, Sample,
+    StreamConfig, StreamError, SupportedBufferSize,
 };
 use dasp_interpolate::linear::Linear;
 use dasp_signal::{interpolate::Converter, Signal};
@@ -68,18 +68,35 @@ CheMic - Microphone testing tool (v{VERSION})
                 .expect("Failed to select output device")
         });
 
-    // Obtain the device configuration
-    let input_config: StreamConfig = input_device
+    // Obtain the supported device configs
+    let supported_input_config = input_device
         .device
         .default_input_config()
-        .expect("No supported input configs")
-        .into();
+        .expect("No supported input configs");
 
-    let output_config: StreamConfig = output_device
+    let supported_output_config = output_device
         .device
         .default_output_config()
-        .expect("No supported output configs")
-        .into();
+        .expect("No supported output configs");
+
+    // Obtain the smallest possible buffer size
+    let min_input_buffer = match supported_input_config.buffer_size() {
+        SupportedBufferSize::Range { min, .. } => *min,
+        SupportedBufferSize::Unknown => 0,
+    };
+
+    let min_output_buffer = match supported_output_config.buffer_size() {
+        SupportedBufferSize::Range { min, .. } => *min,
+        SupportedBufferSize::Unknown => 0,
+    };
+
+    // Obtain the device configuration
+    let mut input_config: StreamConfig = supported_input_config.into();
+    let mut output_config: StreamConfig = supported_output_config.into();
+
+    // Use the smallest possible buffer size
+    input_config.buffer_size = BufferSize::Fixed(min_input_buffer);
+    output_config.buffer_size = BufferSize::Fixed(min_output_buffer);
 
     // Print the device information
     println!("== == == == Input Device == == == ==");
@@ -180,7 +197,7 @@ fn start_streams(
     // We need to interpolate to the target sample rate
     let converter = Converter::from_hz_to_hz(
         source,
-        Linear::new(0f32, 0f32),
+        Linear::new(Sample::EQUILIBRIUM, Sample::EQUILIBRIUM),
         input_config.sample_rate.0 as f64,
         output_config.sample_rate.0 as f64,
     );
