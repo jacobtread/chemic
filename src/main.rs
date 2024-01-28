@@ -1,7 +1,7 @@
 use cpal::{
     traits::{DeviceTrait, HostTrait, StreamTrait},
     BufferSize, Device, Devices, DevicesError, Host, InputCallbackInfo, OutputCallbackInfo, Sample,
-    StreamConfig, StreamError, SupportedBufferSize,
+    SampleRate, StreamConfig, StreamError, SupportedBufferSize,
 };
 use dasp_interpolate::linear::Linear;
 use dasp_signal::{interpolate::Converter, Signal};
@@ -33,13 +33,20 @@ CheMic - Microphone testing tool (v{VERSION})
     let mut input_device: Option<NamedDevice> = None;
     let mut output_device: Option<NamedDevice> = None;
 
-    // Check for the default mode arg
-    let is_default = args()
-        .skip(1)
-        // Convert to lowercase for case-insensitive matching
-        .map(|arg| arg.to_lowercase())
-        // Find a matching default arg
-        .any(|arg| matches!(arg.as_str(), "default" | "--default" | "d" | "-d"));
+    // Whether to use the default device
+    let mut is_default = false;
+
+    // Whether to delay the audio
+    let mut is_delayed = false;
+
+    for arg in args().skip(1) {
+        let arg = arg.to_lowercase();
+        if matches!(arg.as_str(), "default" | "--default" | "d" | "-d") {
+            is_default = true;
+        } else if matches!(arg.as_str(), "delay" | "--delay" | "dly" | "-dly") {
+            is_delayed = true;
+        }
+    }
 
     // Set the default input devices
     if is_default {
@@ -79,24 +86,18 @@ CheMic - Microphone testing tool (v{VERSION})
         .default_output_config()
         .expect("No supported output configs");
 
-    // Obtain the smallest possible buffer size
-    let min_input_buffer = match supported_input_config.buffer_size() {
-        SupportedBufferSize::Range { min, .. } => *min,
-        SupportedBufferSize::Unknown => 0,
-    };
-
-    let min_output_buffer = match supported_output_config.buffer_size() {
-        SupportedBufferSize::Range { min, .. } => *min,
-        SupportedBufferSize::Unknown => 0,
-    };
+    let input_buffer_size = supported_input_config.buffer_size();
+    let output_buffer_size = supported_output_config.buffer_size();
 
     // Obtain the device configuration
-    let mut input_config: StreamConfig = supported_input_config.into();
-    let mut output_config: StreamConfig = supported_output_config.into();
+    let mut input_config: StreamConfig = supported_input_config.config();
+    let mut output_config: StreamConfig = supported_output_config.config();
 
-    // Use the smallest possible buffer size
-    input_config.buffer_size = BufferSize::Fixed(min_input_buffer);
-    output_config.buffer_size = BufferSize::Fixed(min_output_buffer);
+    // Determine the buffer type to use
+    input_config.buffer_size =
+        get_buffer_size(input_buffer_size, input_config.sample_rate, is_delayed);
+    output_config.buffer_size =
+        get_buffer_size(output_buffer_size, output_config.sample_rate, is_delayed);
 
     // Print the device information
     println!("== == == == Input Device == == == ==");
@@ -117,6 +118,27 @@ CheMic - Microphone testing tool (v{VERSION})
         output_device.device,
         &output_config,
     )
+}
+
+fn get_buffer_size(
+    supported: &SupportedBufferSize,
+    sample_rate: SampleRate,
+    is_delayed: bool,
+) -> BufferSize {
+    /// The time to delay in seconds
+    const DELAY_SECONDS: u32 = 2;
+
+    match supported {
+        SupportedBufferSize::Range { min, max } => {
+            if is_delayed {
+                BufferSize::Fixed((sample_rate.0.saturating_mul(DELAY_SECONDS)).min(*max))
+            } else {
+                BufferSize::Fixed(*min)
+            }
+        }
+        // Unable to determine limitations
+        SupportedBufferSize::Unknown => BufferSize::Default,
+    }
 }
 
 /// Create a input stream callback that pushes the callback data onto
