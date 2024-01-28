@@ -78,7 +78,7 @@ CheMic - Microphone testing tool (v{VERSION})
     let output_config: StreamConfig = output_device
         .device
         .default_output_config()
-        .expect("No suppoorted output configs")
+        .expect("No supported output configs")
         .into();
 
     // Print the device information
@@ -287,7 +287,7 @@ impl From<Device> for NamedDevice {
 enum DeviceType {
     /// Input device
     Input,
-    /// Ouput device
+    /// Output device
     Output,
 }
 
@@ -342,7 +342,7 @@ fn prompt_device(host: &Host, prompt: &str, ty: DeviceType) -> io::Result<NamedD
         return Err(io::Error::other("No devices available"));
     }
 
-    // Collec the device names
+    // Collect the device names
     let device_names: Vec<&str> = devices.iter().map(|device| device.name.as_str()).collect();
 
     // Create the selection prompt
