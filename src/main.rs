@@ -10,7 +10,10 @@ use dialoguer::{
     theme::ColorfulTheme,
     Select,
 };
-use ringbuf::{HeapConsumer, HeapProducer, HeapRb};
+use ringbuf::{
+    traits::{Consumer, Producer, Split},
+    HeapRb,
+};
 use std::{env::args, io};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -18,12 +21,12 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 fn main() -> io::Result<()> {
     println!(
         r#"
-                                                           
- ______ __           _______ __         (=)    
-|      |  |--.-----.|   |   |__|.----.  |x|   
-|   ---|     |  -__||       |  ||  __|  | |  
-|______|__|__|_____||__|_|__|__||____|  |_| 
-                                        
+
+ ______ __           _______ __         (=)
+|      |  |--.-----.|   |   |__|.----.  |x|
+|   ---|     |  -__||       |  ||  __|  | |
+|______|__|__|_____||__|_|__|__||____|  |_|
+
 CheMic - Microphone testing tool (v{VERSION})
 "#
     );
@@ -140,6 +143,9 @@ fn get_buffer_size(
         SupportedBufferSize::Unknown => BufferSize::Default,
     }
 }
+
+type HeapProducer<T> = <HeapRb<T> as Split>::Prod;
+type HeapConsumer<T> = <HeapRb<T> as Split>::Cons;
 
 /// Create a input stream callback that pushes the callback data onto
 /// the provided `producer`
@@ -285,7 +291,7 @@ impl Signal for ConsumerSignal {
 
     fn next(&mut self) -> Self::Frame {
         self.0
-            .pop()
+            .try_pop()
             // Use silence if no more values are available
             .unwrap_or(Sample::EQUILIBRIUM)
     }
