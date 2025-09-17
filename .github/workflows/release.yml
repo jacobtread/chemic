@@ -127,6 +127,12 @@ jobs:
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           fi
+      - name: "Install alsa"
+        if: "runner.os == 'Linux'"
+        run: "sudo apt-get install libasound2-dev"
+      - name: "Install libjack"
+        if: "runner.os == 'Linux'"
+        run: "sudo apt-get install libjack-jackd2-dev libjack-jackd2-0"
       - name: Install dist
         run: ${{ matrix.install_dist.run }}
       # Get the dist-manifest

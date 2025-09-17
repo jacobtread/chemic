@@ -36,7 +36,7 @@ jobs:
         run: |
           curl -L -o asio.zip $env:LINK
           7z x -oasio asio.zip
-          move asio\*\* asio\
+          mv asio\*\* asio\
       - name: Install ASIO4ALL
         run: choco install asio4all
       - name: Install llvm and clang

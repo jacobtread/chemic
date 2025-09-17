@@ -1,0 +1,7 @@
+# ALSA is required on linux to build this sets that up
+- name: Install alsa
+  if: runner.os == 'Linux'
+  run: sudo apt-get install libasound2-dev
+- name: Install libjack
+  if: runner.os == 'Linux'
+  run: sudo apt-get install libjack-jackd2-dev libjack-jackd2-0
