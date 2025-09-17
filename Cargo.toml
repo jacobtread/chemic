@@ -8,6 +8,7 @@ readme = "README.md"
 authors = ["Jacobtread <jacobtread@gmail.com>"]
 keywords = ["Microphone", "Testing"]
 repository = "https://github.com/jacobtread/chemic"
+homepage = "https://github.com/jacobtread/chemic"
 
 [dependencies]
 cpal = "0.15.0"
@@ -31,3 +32,9 @@ lto = "thin"
 [package.metadata.binstall]
 pkg-url = "{ repo }/releases/download/v{ version }/{ name }{ archive-suffix }"
 pkg-fmt = "bin"
+
+[package.metadata.wix]
+upgrade-guid = "8A474094-213D-4A76-9822-7EAFB10BEDD6"
+path-guid = "B3A1F38A-791C-45E0-A524-BBCCA966D719"
+license = false
+eula = false
